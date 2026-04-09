@@ -53,7 +53,7 @@ app.use('/stream', async (req, res, next) => {
   // Wait for initial stream file to be ready if it's the playlist request
   if (ENABLE_ON_DEMAND && req.path === '/stream.m3u8' && !isStreamReady) {
     let wait = 0;
-    while (!isStreamReady && wait < 10) {
+    while (!isStreamReady && wait < 20) {
       await waitFor(1000);
       wait++;
     }
