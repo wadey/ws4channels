@@ -19,6 +19,7 @@ const HLS_SETUP_DELAY = 2000;
 const FRAME_RATE = Number(process.env.FRAME_RATE || 10);
 const WS4KP_INTERNATIONAL = process.env.WS4KP_INTERNATIONAL?.toLowerCase() === 'true';
 const ENABLE_IGPU = process.env.ENABLE_IGPU?.toLowerCase() === 'true';
+const ENABLE_ON_DEMAND = process.env.ENABLE_ON_DEMAND?.toLowerCase() === 'true';
 const PUPPETEER_EXECUTABLE_PATH =
   process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
 
@@ -44,13 +45,13 @@ const waitFor = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 app.use('/stream', async (req, res, next) => {
   lastRequestTime = Date.now();
-  if (!ffmpegProc && !isRestarting) {
+  if (ENABLE_ON_DEMAND && !ffmpegProc && !isRestarting) {
     console.log('Client connected to stream, starting transcoding...');
     startTranscoding();
   }
 
   // Wait for initial stream file to be ready if it's the playlist request
-  if (req.path === '/stream.m3u8' && !isStreamReady) {
+  if (ENABLE_ON_DEMAND && req.path === '/stream.m3u8' && !isStreamReady) {
     let wait = 0;
     while (!isStreamReady && wait < 10) {
       await waitFor(1000);
@@ -63,7 +64,7 @@ app.use('/logo', express.static(LOGO_DIR));
 
 // Check for idle clients every 30 seconds
 setInterval(() => {
-  if (ffmpegProc && Date.now() - lastRequestTime > 300000) { // 5 minutes idle
+  if (ENABLE_ON_DEMAND && ffmpegProc && Date.now() - lastRequestTime > 300000) { // 5 minutes idle
     console.log('No active clients for 5 minutes, stopping transcoding...');
     stopTranscoding();
   }
@@ -261,8 +262,8 @@ async function startTranscoding() {
       .on('error', async err => {
         console.error('FFmpeg error:', err);
         await stopTranscoding();
-        // Only restart if there was recent activity
-        if (Date.now() - lastRequestTime < 120000) {
+        // Always restart if on-demand is disabled, otherwise only if there was recent activity
+        if (!ENABLE_ON_DEMAND || (Date.now() - lastRequestTime < 120000)) {
           startTranscoding();
         }
       })
@@ -288,8 +289,10 @@ async function startTranscoding() {
 
         ffmpegStream.write(screenshot);
       } catch (err) {
-        console.warn('Capture error, retrying...', err.message);
-        await startBrowser();
+        if (isStreamReady) {
+          console.warn('Capture error, retrying...', err.message);
+          await startBrowser();
+        }
       }
     }, 1000 / FRAME_RATE);
 
@@ -347,6 +350,10 @@ console.log(`Version ${VERSION} | Running with ${cpus} CPU cores, ${memoryMB}MB 
 
 app.listen(STREAM_PORT, () => {
   console.log(`Streaming server running on port ${STREAM_PORT}`);
+  if (!ENABLE_ON_DEMAND) {
+    console.log('On-demand transcoding disabled, starting now...');
+    startTranscoding();
+  }
 });
 
 process.on('SIGINT', async () => {
