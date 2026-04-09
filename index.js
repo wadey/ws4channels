@@ -23,6 +23,11 @@ const ENABLE_ON_DEMAND = process.env.ENABLE_ON_DEMAND?.toLowerCase() === 'true';
 const PUPPETEER_EXECUTABLE_PATH =
   process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
 
+const GUIDE_CHANNEL_ID = process.env.GUIDE_CHANNEL_ID || 'WS4000';
+const GUIDE_CHANNEL_NAME = process.env.GUIDE_CHANNEL_NAME || 'WeatherStar 4000';
+const GUIDE_PROGRAMME_NAME = process.env.GUIDE_PROGRAMME_NAME || 'Local Weather';
+const GUIDE_PROGRAMME_DESC = process.env.GUIDE_PROGRAMME_DESC || 'Enjoy your local weather with a touch of nostalgia.';
+
 const OUTPUT_DIR = path.join(__dirname, 'output');
 const AUDIO_DIR = path.join(__dirname, 'music');
 const LOGO_DIR = path.join(__dirname, 'logo');
@@ -145,8 +150,8 @@ function generateXMLTV(host) {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE tv SYSTEM "xmltv.dtd">
 <tv>
-<channel id="WS4000">
-<display-name>WeatherStar 4000</display-name>
+<channel id="${GUIDE_CHANNEL_ID}">
+<display-name>${GUIDE_CHANNEL_NAME}</display-name>
 <icon src="${baseUrl}/logo/ws4000.png" />
 </channel>`;
 
@@ -156,9 +161,9 @@ function generateXMLTV(host) {
     const start = startTime.toISOString().replace(/[-:T]/g, '').split('.')[0] + ' +0000';
     const end = endTime.toISOString().replace(/[-:T]/g, '').split('.')[0] + ' +0000';
     xml += `
-<programme start="${start}" stop="${end}" channel="WS4000">
-<title lang="en">Local Weather</title>
-<desc lang="en">Enjoy your local weather with a touch of nostalgia.</desc>
+<programme start="${start}" stop="${end}" channel="${GUIDE_CHANNEL_ID}">
+<title lang="en">${GUIDE_PROGRAMME_NAME}</title>
+<desc lang="en">${GUIDE_PROGRAMME_DESC}</desc>
 <icon src="${baseUrl}/logo/ws4000.png" />
 </programme>`;
   }
