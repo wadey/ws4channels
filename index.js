@@ -27,13 +27,6 @@ const AUDIO_DIR = path.join(__dirname, 'music');
 const LOGO_DIR = path.join(__dirname, 'logo');
 const HLS_FILE = path.join(OUTPUT_DIR, 'stream.m3u8');
 
-[OUTPUT_DIR, AUDIO_DIR, LOGO_DIR].forEach(dir => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-});
-
-app.use('/stream', express.static(OUTPUT_DIR));
-app.use('/logo', express.static(LOGO_DIR));
-
 let ffmpegProc = null;
 let ffmpegStream = null;
 let browser = null;
@@ -41,8 +34,40 @@ let page = null;
 let captureInterval = null;
 let isStreamReady = false;
 let isRestarting = false;
+let lastRequestTime = 0;
 
 const waitFor = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+[OUTPUT_DIR, AUDIO_DIR, LOGO_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+});
+
+app.use('/stream', async (req, res, next) => {
+  lastRequestTime = Date.now();
+  if (!ffmpegProc && !isRestarting) {
+    console.log('Client connected to stream, starting transcoding...');
+    startTranscoding();
+  }
+
+  // Wait for initial stream file to be ready if it's the playlist request
+  if (req.path === '/stream.m3u8' && !isStreamReady) {
+    let wait = 0;
+    while (!isStreamReady && wait < 10) {
+      await waitFor(1000);
+      wait++;
+    }
+  }
+  next();
+}, express.static(OUTPUT_DIR));
+app.use('/logo', express.static(LOGO_DIR));
+
+// Check for idle clients every 30 seconds
+setInterval(() => {
+  if (ffmpegProc && Date.now() - lastRequestTime > 300000) { // 5 minutes idle
+    console.log('No active clients for 5 minutes, stopping transcoding...');
+    stopTranscoding();
+  }
+}, 30000);
 
 // Helper: Fisher–Yates shuffle
 function shuffleArray(array) {
@@ -187,82 +212,91 @@ async function startBrowser() {
 }
 
 async function startTranscoding() {
-  await startBrowser();
-  createAudioInputFile();
+  if (isRestarting || ffmpegProc) return;
+  isRestarting = true;
+  try {
+    await startBrowser();
+    createAudioInputFile();
 
-  ffmpegStream = new PassThrough();
+    ffmpegStream = new PassThrough();
 
-  const useVaapi = ENABLE_IGPU && isVaapiAvailable();
-  if (ENABLE_IGPU && !useVaapi) console.warn('ENABLE_IGPU set but /dev/dri/renderD128 not found — falling back to libx264');
-  console.log(`Transcoding mode: ${useVaapi ? 'iGPU (h264_vaapi)' : 'CPU (libx264)'}`);
+    const useVaapi = ENABLE_IGPU && isVaapiAvailable();
+    if (ENABLE_IGPU && !useVaapi) console.warn('ENABLE_IGPU set but /dev/dri/renderD128 not found — falling back to libx264');
+    console.log(`Transcoding mode: ${useVaapi ? 'iGPU (h264_vaapi)' : 'CPU (libx264)'}`);
 
-  const vaapiInputOptions = useVaapi ? ['-vaapi_device /dev/dri/renderD128'] : [];
-  const videoComplexFilter = useVaapi
-    ? '[0:v]scale=1280:720,format=nv12,hwupload[v]'
-    : '[0:v]scale=1280:720[v]';
-  const videoCodecOptions = useVaapi
-    ? ['-c:v h264_vaapi']
-    : ['-c:v libx264', '-preset ultrafast'];
+    const vaapiInputOptions = useVaapi ? ['-vaapi_device /dev/dri/renderD128'] : [];
+    const videoComplexFilter = useVaapi
+      ? '[0:v]scale=1280:720,format=nv12,hwupload[v]'
+      : '[0:v]scale=1280:720[v]';
+    const videoCodecOptions = useVaapi
+      ? ['-c:v h264_vaapi']
+      : ['-c:v libx264', '-preset ultrafast'];
 
-  ffmpegProc = ffmpeg()
-    .input(ffmpegStream)
-    .inputFormat('image2pipe')
-    .inputOptions([`-framerate ${FRAME_RATE}`, ...vaapiInputOptions])
-    .input(path.join(__dirname, 'audio_list.txt'))
-    .inputOptions(['-f concat', '-safe 0', '-stream_loop -1'])
-    .complexFilter([videoComplexFilter, '[1:a]volume=0.5[a]'])
-    .outputOptions([
-      '-map [v]',
-      '-map [a]',
-      ...videoCodecOptions,
-      '-c:a aac',
-      '-b:a 128k',
-      '-b:v 1000k',
-      '-f hls',
-      '-hls_time 2',
-      '-hls_list_size 2',
-      '-hls_flags delete_segments'
-    ])
-    .output(HLS_FILE)
-    .on('start', () => {
-      console.log(`Started FFmpeg - Version ${VERSION}`);
-      setTimeout(() => {
-        isStreamReady = true;
-      }, HLS_SETUP_DELAY);
-    })
-    .on('error', async err => {
-      console.error('FFmpeg error:', err);
-      await stopTranscoding();
-      startTranscoding();
-    })
-    .on('end', () => {
-      ffmpegProc = null;
-      ffmpegStream = null;
-      isStreamReady = false;
-    });
-
-  captureInterval = setInterval(async () => {
-    if (!ffmpegProc || !ffmpegStream || !page) return;
-
-    try {
-      if (page.isClosed()) {
-        await startBrowser();
-        return;
-      }
-
-      const screenshot = await page.screenshot({
-        type: 'jpeg',
-        clip: { x: WS4KP_INTERNATIONAL ? 8 : 4, y: 50, width: 840, height: 470 }
+    ffmpegProc = ffmpeg()
+      .input(ffmpegStream)
+      .inputFormat('image2pipe')
+      .inputOptions([`-framerate ${FRAME_RATE}`, ...vaapiInputOptions])
+      .input(path.join(__dirname, 'audio_list.txt'))
+      .inputOptions(['-f concat', '-safe 0', '-stream_loop -1'])
+      .complexFilter([videoComplexFilter, '[1:a]volume=0.5[a]'])
+      .outputOptions([
+        '-map [v]',
+        '-map [a]',
+        ...videoCodecOptions,
+        '-c:a aac',
+        '-b:a 128k',
+        '-b:v 1000k',
+        '-f hls',
+        '-hls_time 2',
+        '-hls_list_size 2',
+        '-hls_flags delete_segments'
+      ])
+      .output(HLS_FILE)
+      .on('start', () => {
+        console.log(`Started FFmpeg - Version ${VERSION}`);
+        setTimeout(() => {
+          isStreamReady = true;
+        }, HLS_SETUP_DELAY);
+      })
+      .on('error', async err => {
+        console.error('FFmpeg error:', err);
+        await stopTranscoding();
+        // Only restart if there was recent activity
+        if (Date.now() - lastRequestTime < 120000) {
+          startTranscoding();
+        }
+      })
+      .on('end', () => {
+        ffmpegProc = null;
+        ffmpegStream = null;
+        isStreamReady = false;
       });
 
-      ffmpegStream.write(screenshot);
-    } catch (err) {
-      console.warn('Capture error, retrying...', err.message);
-      await startBrowser();
-    }
-  }, 1000 / FRAME_RATE);
+    captureInterval = setInterval(async () => {
+      if (!ffmpegProc || !ffmpegStream || !page) return;
 
-  ffmpegProc.run();
+      try {
+        if (page.isClosed()) {
+          await startBrowser();
+          return;
+        }
+
+        const screenshot = await page.screenshot({
+          type: 'jpeg',
+          clip: { x: WS4KP_INTERNATIONAL ? 8 : 4, y: 50, width: 840, height: 470 }
+        });
+
+        ffmpegStream.write(screenshot);
+      } catch (err) {
+        console.warn('Capture error, retrying...', err.message);
+        await startBrowser();
+      }
+    }, 1000 / FRAME_RATE);
+
+    ffmpegProc.run();
+  } finally {
+    isRestarting = false;
+  }
 }
 
 async function stopTranscoding() {
@@ -311,9 +345,8 @@ app.get('/health', (req, res) => {
 const { cpus, memoryMB } = getContainerLimits();
 console.log(`Version ${VERSION} | Running with ${cpus} CPU cores, ${memoryMB}MB RAM`);
 
-app.listen(STREAM_PORT, async () => {
+app.listen(STREAM_PORT, () => {
   console.log(`Streaming server running on port ${STREAM_PORT}`);
-  await startTranscoding();
 });
 
 process.on('SIGINT', async () => {
