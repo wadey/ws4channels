@@ -23,7 +23,7 @@ const ENABLE_ON_DEMAND = process.env.ENABLE_ON_DEMAND?.toLowerCase() === 'true';
 const PUPPETEER_EXECUTABLE_PATH =
   process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
 
-const GUIDE_CHANNEL_ID = process.env.GUIDE_CHANNEL_ID || 'WS4000';
+const GUIDE_CHANNEL_ID = process.env.GUIDE_CHANNEL_ID || 'weatherStar4000';
 const GUIDE_CHANNEL_NAME = process.env.GUIDE_CHANNEL_NAME || 'WeatherStar 4000';
 const GUIDE_PROGRAMME_NAME = process.env.GUIDE_PROGRAMME_NAME || 'Local Weather';
 const GUIDE_PROGRAMME_DESC = process.env.GUIDE_PROGRAMME_DESC || 'Enjoy your local weather with a touch of nostalgia.';
@@ -333,7 +333,7 @@ app.get('/playlist.m3u', (req, res) => {
   const host = req.headers.host || `localhost:${STREAM_PORT}`;
   const baseUrl = `http://${host}`;
   const m3uContent = `#EXTM3U
-#EXTINF:-1 channel-id="weatherStar4000" tvg-id="weatherStar4000" tvg-channel-no="275" tvc-guide-placeholders="3600" tvc-guide-title="Local Weather" tvc-guide-description="Enjoy your local weather with a touch of nostalgia." tvc-guide-art="${baseUrl}/logo/ws4000.png" tvg-logo="${baseUrl}/logo/ws4000.png",WeatherStar 4000
+#EXTINF:-1 channel-id="${GUIDE_CHANNEL_ID}" tvg-id="${GUIDE_CHANNEL_ID}" tvg-channel-no="275" tvc-guide-placeholders="3600" tvc-guide-title="${GUIDE_PROGRAMME_NAME}" tvc-guide-description="${GUIDE_PROGRAMME_DESC}" tvc-guide-art="${baseUrl}/logo/ws4000.png" tvg-logo="${baseUrl}/logo/ws4000.png",${GUIDE_CHANNEL_NAME}
 ${baseUrl}/stream/stream.m3u8
 `;
   res.set('Content-Type', 'application/x-mpegURL');
