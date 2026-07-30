@@ -26,10 +26,11 @@ const PERMALINK_URL = process.env.PERMALINK_URL || null;
 const HLS_SETUP_DELAY = 2000;
 const FRAME_RATE = process.env.FRAME_RATE || 10;
 
-const GUIDE_CHANNEL_ID = process.env.GUIDE_CHANNEL_ID || 'weatherStar4000';
+const GUIDE_CHANNEL_ID = process.env.GUIDE_CHANNEL_ID || 'WS4000';
 const GUIDE_CHANNEL_NAME = process.env.GUIDE_CHANNEL_NAME || 'WeatherStar 4000';
 const GUIDE_PROGRAMME_NAME = process.env.GUIDE_PROGRAMME_NAME || 'Local Weather';
 const GUIDE_PROGRAMME_DESC = process.env.GUIDE_PROGRAMME_DESC || 'Enjoy your local weather with a touch of nostalgia.';
+const GUIDE_M3U_CHANNEL_ID = process.env.GUIDE_M3U_CHANNEL_ID || 'weatherStar4000';
 
 const OUTPUT_DIR = path.join(__dirname, 'output');
 const AUDIO_DIR = path.join(__dirname, 'music');
@@ -342,7 +343,7 @@ app.get('/playlist.m3u',(req,res)=>{
   const host = req.headers.host || `localhost:${STREAM_PORT}`;
   const baseUrl = `http://${host}`;
   const m3uContent = `#EXTM3U
-#EXTINF:-1 channel-id="${GUIDE_CHANNEL_ID}" tvg-id="${GUIDE_CHANNEL_ID}" tvg-channel-no="275" tvc-guide-placeholders="3600" tvc-guide-title="${GUIDE_PROGRAMME_NAME}" tvc-guide-description="${GUIDE_PROGRAMME_DESC}" tvc-guide-art="${baseUrl}/logo/ws4000.png" tvg-logo="${baseUrl}/logo/ws4000.png",${GUIDE_CHANNEL_NAME}
+#EXTINF:-1 channel-id="${GUIDE_M3U_CHANNEL_ID}" tvg-id="${GUIDE_M3U_CHANNEL_ID}" tvg-channel-no="275" tvc-guide-placeholders="3600" tvc-guide-title="${GUIDE_PROGRAMME_NAME}" tvc-guide-description="${GUIDE_PROGRAMME_DESC}" tvc-guide-art="${baseUrl}/logo/ws4000.png" tvg-logo="${baseUrl}/logo/ws4000.png",${GUIDE_CHANNEL_NAME}
 ${baseUrl}/stream/stream.m3u8
 `;
   res.set('Content-Type','application/x-mpegURL'); res.send(m3uContent);
